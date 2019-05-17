@@ -19,62 +19,64 @@ type (
 	}
 
 	icqApiResponse struct {
-		Timestamp uint64 `json:"ts"`
-		Status    struct {
-			Code int
-		}
-		Method  string
-		ReqId   string
-		Results []*responseResult
+		Timestamp uint64            `json:"ts"`
+		Status    *responseStatus   `json:"status"`
+		Method    string            `json:"method"`
+		ReqId     string            `json:"reqid"`
+		Results   []*responseResult `json:"results"`
+	}
+
+	responseStatus struct {
+		Code int `json:"code"`
 	}
 
 	responseResult struct {
-		Messages     []*resultMessage
-		LastMsgId    uint64
-		PatchVersion string
-		Yours        *resultYours
-		Unreads      uint
-		UnreadCnt    uint
-		Path         []*resultPatch
-		Persons      []*resultPerson
+		Messages     []*resultMessage `json:"messages"`
+		LastMsgId    uint64           `json:"lastmsgid"`
+		PatchVersion string           `json:"patchversion"`
+		Yours        *resultYours     `json:"yours"`
+		Unreads      uint             `json:"unreads"`
+		UnreadCnt    uint             `json:"unreadcnt"`
+		Path         []*resultPatch   `json:"path"`
+		Persons      []*resultPerson  `json:"persons"`
 	}
 
 	resultYours struct {
-		LastRead        uint64
-		LastDelivered   uint64
-		LastReadMention uint64
+		LastRead        uint64 `json:"lastread"`
+		LastDelivered   uint64 `json:"lastdelivered"`
+		LastReadMention uint64 `json:"lastreadmention"`
 	}
 
 	resultPatch struct {
-		MsgId   uint64
+		MsgId   uint64 `json:"msgid"`
 		Pa_type string `json:"type"`
 	}
 
 	resultPerson struct {
-		Sn        string
-		Role      string
-		Friendly  string
-		FirstName string
-		LastName  string
+		Sn        string `json:"sn"`
+		Role      string `json:"role"`
+		Friendly  string `json:"friendly"`
+		FirstName string `json:"firstname"`
+		LastName  string `json:"lastname"`
 	}
 
 	resultMessage struct {
-		MsgId uint64
-		Time  uint64
-		Wid   string
-		Chat  *messageChat
-		Text  string
+		MsgId uint64       `json:"msgid"`
+		Time  uint64       `json:"time"`
+		Wid   string       `json:"wid"`
+		Chat  *messageChat `json:"chat"`
+		Text  string       `json:"text"`
 	}
 
 	messageChat struct {
-		Senders     string
-		Name        string
-		MemberEvent *chatMemberEvent
+		Senders     string           `json:"senders"`
+		Name        string           `json:"name"`
+		MemberEvent *chatMemberEvent `json:"memberevent"`
 	}
 
 	chatMemberEvent struct {
-		Ev_type string `json:"type"`
-		Role    string
+		Ev_type string   `json:"type"`
+		Role    string   `json:"role"`
 		Members []string `json:"members"`
 	}
 
