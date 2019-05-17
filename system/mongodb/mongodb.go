@@ -5,6 +5,8 @@ import (
 	"time"
 
 	"github.com/rs/zerolog"
+	//	"go.mongodb.org/mongo-driver/bson"
+	"go.mongodb.org/mongo-driver/bson/primitive"
 	"go.mongodb.org/mongo-driver/mongo"
 	"go.mongodb.org/mongo-driver/mongo/options"
 	"go.mongodb.org/mongo-driver/mongo/readpref"
@@ -23,17 +25,32 @@ type MongoDB struct {
 
 type (
 	CollectionChats struct {
-		Name     string
-		AimId    string
-		Messages []CollectionChatsMessage
+		ID       primitive.ObjectID       `bson:"_id"`
+		Name     string                   `bson:"name"`
+		AimId    string                   `bson:"aimId"`
+		Messages []CollectionChatsMessage `bson:"messages"`
 	}
 	CollectionChatsMessage struct {
-		MsgId  uint64
-		Time   uint64
-		Wid    string
-		Sender string
-		Text   string
+		MsgId  uint64     `bson:"msgId"`
+		Time   *time.Time `bson:"time"`
+		Wid    string     `bson:"wid"`
+		Sender string     `bson:"sender"`
+		Text   string     `bson:"text"`
 	}
+
+	CollectionRAPIRequests struct {
+		Method string                        `bson:"method"`
+		ReqId  string                        `bson:"reqId"`
+		Params *CollectionRAPIRequestsParams `bson:"params"`
+	}
+	CollectionRAPIRequestsParams struct {
+		Sn           string `bson:"sn"`
+		FromMsgId    uint64 `bson:"fromMsgId"`
+		Count        int    `bson:"count"`
+		PatchVersion string `bson:"patchVersion"`
+	}
+
+	// TODO - RESPONSE SAVE
 )
 
 /* test database credentials ( yes, i know; it's public data, ok? ):
@@ -88,12 +105,12 @@ func (m *MongoDB) dbInsertOne(collection string, data interface{}) (e error) {
 	ctx, cncl := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cncl()
 
-	var res *mongo.InsertOneResult
-	if res, e = m.client.Database("icqdumper").Collection(collection).InsertOne(ctx, &data); e != nil {
+	if res, e := m.client.Database("icqdumper").Collection(collection).InsertOne(ctx, &data); e != nil {
 		return e
+	} else {
+		m.log.Info().Str("inserted id", res.InsertedID.(primitive.ObjectID).Hex()).
+			Msg("New record has been successfully writed")
 	}
-
-	m.log.Info().Interface("inserted id", res.InsertedID).Msg("New record has been successfully writed")
 
 	return e
 }
