@@ -31,11 +31,11 @@ type (
 		Messages []CollectionChatsMessage `bson:"messages"`
 	}
 	CollectionChatsMessage struct {
-		MsgId  uint64     `bson:"msgId"`
-		Time   *time.Time `bson:"time"`
-		Wid    string     `bson:"wid"`
-		Sender string     `bson:"sender"`
-		Text   string     `bson:"text"`
+		MsgId  uint64    `bson:"msgId"`
+		Time   time.Time `bson:"time"`
+		Wid    string    `bson:"wid"`
+		Sender string    `bson:"sender"`
+		Text   string    `bson:"text"`
 	}
 
 	CollectionRAPIRequests struct {
@@ -101,15 +101,38 @@ func (m *MongoDB) dbDisconnect() (e error) {
 	return e
 }
 
-func (m *MongoDB) dbInsertOne(collection string, data interface{}) (e error) {
+func (m *MongoDB) dbInsertOne(collection string, data *interface{}) (e error) {
 	ctx, cncl := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cncl()
 
-	if res, e := m.client.Database("icqdumper").Collection(collection).InsertOne(ctx, &data); e != nil {
-		return e
-	} else {
+	if res, e := m.client.Database("icqdumper").Collection(collection).InsertOne(ctx, data); e == nil {
 		m.log.Info().Str("inserted id", res.InsertedID.(primitive.ObjectID).Hex()).
 			Msg("New record has been successfully writed")
+	}
+
+	return e
+}
+
+func (m *MongoDB) dbInsertMany(collection string, data *[]interface{}) (e error) {
+	ctx, cncl := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cncl()
+
+	if res, e := m.client.Database("icqdumper").Collection(collection).InsertMany(ctx, *data); e == nil {
+		for _, v := range res.InsertedIDs {
+			m.log.Info().Str("inserted id", v.(primitive.ObjectID).Hex()).Msg("New record has been successfully writed")
+		}
+	}
+
+	return e
+}
+
+func (m *MongoDB) dbUpdateOne(collection string, filter *interface{}, data *interface{}) (e error) {
+	ctx, cncl := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cncl()
+
+	if res, e := m.client.Database("icqdumper").Collection(collection).UpdateOne(ctx, *filter, *data); e == nil {
+		m.log.Info().Int64("matched", res.MatchedCount).Int64("modified", res.ModifiedCount).
+			Msg("Some records in collection has been successfully updated")
 	}
 
 	return e
@@ -122,4 +145,13 @@ func (m *MongoDB) Destruct() error {
 	}
 
 	return m.dbDisconnect()
+}
+func (m *MongoDB) InsertOne(collection string, data *interface{}) (e error) {
+	return m.dbInsertOne(collection, data)
+}
+func (m *MongoDB) InsertMany(collection string, data *[]interface{}) (e error) {
+	return m.dbInsertMany(collection, data)
+}
+func (m *MongoDB) UpdateOne(collection string, filter *interface{}, data interface{}) (e error) {
+	return e
 }
