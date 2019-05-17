@@ -97,6 +97,28 @@ type (
 		Count        int    `json:"count,omitempty"`
 		PatchVersion string `json:"patchVersion,omitempty"`
 	}
+
+	// GET /getBuddyList
+	getBuddyListRsp struct {
+		StatusCode uint16               `json:"statusCode,omitempty"`
+		StatusText string               `json:"statusText,omitempty"`
+		Data       *getBuddyListRspData `json:"data,omitempty"`
+	}
+	getBuddyListRspData struct {
+		Groups []*getBuddyListRspDataGroup `json:"gropus,omitempty"`
+	}
+
+	getBuddyListRspDataGroup struct {
+		Name    string                           `json:"name,omitempty"`
+		Id      uint                             `json:"id,omitempty"`
+		Buddies []*getBuddyListRspDataGroupBuddy `json:"buddies,omitempty"`
+	}
+	getBuddyListRspDataGroupBuddy struct {
+		AimId     string `json:"aimId,omitempty"`
+		DisplayId string `json:"displayId,omitempty"`
+		Friendly  string `json:"friendly,omitempty"`
+		UserType  string `json:"userType,omitempty"`
+	}
 )
 
 func NewICQApi(aimsid string) *ICQApi {
