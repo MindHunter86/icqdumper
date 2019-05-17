@@ -1,13 +1,13 @@
 package app
 
 import (
+	"github.com/MindHunter86/icqdumper/system/mongodb"
 	"github.com/rs/zerolog"
-	"go.mongodb.org/mongo-driver/mongo"
 )
 
 var (
 	gLogger  *zerolog.Logger
-	gMongoDB *mongo.Client
+	gMongoDB *mongodb.MongoDB
 )
 
 type App struct {
