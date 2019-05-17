@@ -2,10 +2,12 @@ package app
 
 import (
 	"github.com/rs/zerolog"
+	"go.mongodb.org/mongo-driver/mongo"
 )
 
 var (
-	gLogger *zerolog.Logger
+	gLogger  *zerolog.Logger
+	gMongoDB *mongo.Client
 )
 
 type App struct {

@@ -9,6 +9,7 @@ import (
 	"net/url"
 	"time"
 
+	mongodb "github.com/MindHunter86/icqdumper/system/mongodb"
 	uuid "github.com/satori/go.uuid"
 )
 
@@ -42,9 +43,9 @@ type (
 	}
 
 	resultYours struct {
-		LastRead        uint64 `json:"lastRead,omitempty"`
-		LastDelivered   uint64 `json:"lastDelivered,omitempty"`
-		LastReadMention uint64 `json:"lastReadMention,omitempty"`
+		LastRead        int `json:"lastRead,omitempty"`
+		LastDelivered   int `json:"lastDelivered,omitempty"`
+		LastReadMention int `json:"lastReadMention,omitempty"`
 	}
 
 	resultPatch struct {
@@ -65,7 +66,7 @@ type (
 	resultMessage struct {
 		ReadsCount int          `json:"-"`
 		MsgId      uint64       `json:"msgId,omitempty"`
-		Time       uint64       `json:"time,omitempty"`
+		Time       int          `json:"time,omitempty"`
 		Wid        string       `json:"wid,omitempty"`
 		Chat       *messageChat `json:"chat,omitempty"`
 		Text       string       `json:"text,omitempty"`
@@ -100,7 +101,7 @@ type (
 
 	// GET /getBuddyList
 	getBuddyListRsp struct {
-		StatusCode uint16               `json:"statusCode,omitempty"`
+		StatusCode int                  `json:"statusCode,omitempty"`
 		StatusText string               `json:"statusText,omitempty"`
 		Data       *getBuddyListRspData `json:"data,omitempty"`
 	}
@@ -110,7 +111,7 @@ type (
 
 	getBuddyListRspDataGroup struct {
 		Name    string                           `json:"name,omitempty"`
-		Id      uint                             `json:"id,omitempty"`
+		Id      int                              `json:"id,omitempty"`
 		Buddies []*getBuddyListRspDataGroupBuddy `json:"buddies,omitempty"`
 	}
 	getBuddyListRspDataGroupBuddy struct {
@@ -121,13 +122,12 @@ type (
 	}
 )
 
-func NewICQApi(aimsid string) *ICQApi {
-	return &ICQApi{
-		aimsid: aimsid,
-		client: &http.Client{
-			Timeout: time.Second * 3, // todo - add this to cli.Flags
-		},
+func NewICQApi(aimsid, botApiURL string) (icqApi *ICQApi, e error) {
+	icqApi.aimsid = aimsid
+	icqApi.client = &http.Client{
+		Timeout: 3 * time.Second,
 	}
+	return icqApi, e
 }
 
 func (m *ICQApi) dumpHistroyFromChat(chatId string) (e error) {
@@ -213,4 +213,63 @@ func (m *ICQApi) apiResultDebug(res *icqApiResponse) {
 	for i := 0; i < len(res.Results.Messages); i++ {
 		gLogger.Info().Str("author", res.Results.Messages[i].Chat.Sender).Str("msg", res.Results.Messages[i].Text).Uint64("mid", res.Results.Messages[i].MsgId).Msg("message parsed")
 	}
+}
+
+func (m *ICQApi) getChats() (e error) {
+
+	gLogger.Debug().Msg("Trying to fetch chats...")
+
+	var reqId uuid.UUID
+	if reqId, e = uuid.NewV4(); e != nil {
+		return e
+	}
+
+	var reqUrl *url.URL
+	if reqUrl, e = url.Parse("https://botapi.icq.net/getBuddyList?aimsid=" + m.aimsid + "&r=" + reqId.String()); e != nil {
+		return e
+	}
+
+	var req *http.Request
+	if req, e = http.NewRequest("GET", reqUrl.String(), nil); e != nil {
+		return e
+	}
+
+	req.Header.Add("Content-Type", "application/json")
+	req.Header.Set("User-Agent", "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Ubuntu Chromium/62.0.3202.89 Chrome/62.0.3202.89 Safari/537.36")
+	req.Header.Set("Origin", "https://botapi.icq.net/getBuddyList")
+	req.Header.Add("X-Requested-With", "XMLHttpRequest")
+
+	var rsp *http.Response
+	if rsp, e := m.client.Do(req); e != nil {
+		return e
+	}
+	defer rsp.Body.Close()
+
+	return e
+}
+
+func (m *ICQApi) getChatsResponse(r *io.ReadCloser) (chatsResponse *getBuddyListRsp, e error) {
+	var data []byte
+	if data, e = ioutil.ReadAll(*r); e != nil {
+		return nil, e
+	}
+
+	if e = json.Unmarshal(data, chatsResponse); e != nil {
+		return nil, e
+	}
+	return chatsResponse, e
+}
+
+func (m *ICQApi) parseChatResponse(chatResponse *getBuddyListRsp) (e error) {
+
+	var chatsCollections []*mongodb.CollectionChats
+
+	for _, v := range chatResponse.Data {
+		append(chatsCollections, &mongodb.CollectionChats{
+			ID: permisive.NewObjectID(),
+			// XXX
+		})
+	}
+
+	return e
 }
