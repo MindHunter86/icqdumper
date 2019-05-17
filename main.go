@@ -49,6 +49,12 @@ func main() {
 			Name:  "silent, s",
 			Usage: "",
 		},
+		cli.StringFlag{
+			Name:   "mongodb, m",
+			Value:  "",
+			EnvVar: "ICQ_MONGODB",
+			Usage:  "mongodb connection string",
+		},
 	}
 
 	// commands define:
@@ -69,6 +75,10 @@ func main() {
 				if len(c.String("aimsid")) == 0 {
 					log.Info().Str("aimsid", c.String("aimsid")).Msg("Given AIMSID")
 					return errors.New("AIMSID is undefined!")
+				}
+
+				if len(c.String("mongodb")) == 0 {
+					return errors.New("MONGODB connection string is empty!")
 				}
 
 				if !c.Bool("silent") {
