@@ -34,5 +34,18 @@ func (*App) Destroy() (e error) {
 
 func (m *App) CliGetHistory(aimsid, chatid string) (e error) {
 	m.icqClient = NewICQApi(aimsid)
-	return m.icqClient.dumpHistroyFromChat(chatid)
+	return m.parseChatId(chatid)
+}
+
+func (m *App) parseChatId(chatId string) (e error) {
+	switch chatId {
+	case "all":
+		if chats, e := m.icqClient.getChats(); e != nil {
+			return e
+		} else {
+			return m.icqClient.getChatsMessages(chats)
+		}
+	default:
+		return m.icqClient.getChatMessages(chatId, 1)
+	}
 }

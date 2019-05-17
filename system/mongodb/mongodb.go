@@ -126,11 +126,11 @@ func (m *MongoDB) dbInsertMany(collection string, data *[]interface{}) (e error)
 	return e
 }
 
-func (m *MongoDB) dbUpdateOne(collection string, filter *interface{}, data *interface{}) (e error) {
+func (m *MongoDB) dbUpdateOne(collection string, filter interface{}, data interface{}) (e error) {
 	ctx, cncl := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cncl()
 
-	if res, e := m.client.Database("icqdumper").Collection(collection).UpdateOne(ctx, *filter, *data); e == nil {
+	if res, e := m.client.Database("icqdumper").Collection(collection).UpdateOne(ctx, filter, data); e == nil {
 		m.log.Info().Int64("matched", res.MatchedCount).Int64("modified", res.ModifiedCount).
 			Msg("Some records in collection has been successfully updated")
 	}
@@ -152,6 +152,6 @@ func (m *MongoDB) InsertOne(collection string, data *interface{}) (e error) {
 func (m *MongoDB) InsertMany(collection string, data *[]interface{}) (e error) {
 	return m.dbInsertMany(collection, data)
 }
-func (m *MongoDB) UpdateOne(collection string, filter *interface{}, data interface{}) (e error) {
+func (m *MongoDB) UpdateOne(collection string, filter interface{}, data interface{}) (e error) {
 	return e
 }

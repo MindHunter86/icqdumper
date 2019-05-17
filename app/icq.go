@@ -10,8 +10,8 @@ import (
 	"time"
 
 	mongodb "github.com/MindHunter86/icqdumper/system/mongodb"
-	"github.com/mongodb/mongo-go-driver/bson"
 	uuid "github.com/satori/go.uuid"
+	"go.mongodb.org/mongo-driver/bson"
 	"go.mongodb.org/mongo-driver/bson/primitive"
 )
 
@@ -103,10 +103,10 @@ type (
 
 	// POST /rapi (getHistory)
 	getHistoryReq struct {
-		Method string         `json:"method,omitempty"`
-		ReqId  string         `json:"reqId,omitempty"`
-		Aimsid string         `json:"aimsid,omitempty"`
-		Params *requestParams `json:"params,omitempty"`
+		Method string               `json:"method,omitempty"`
+		ReqId  string               `json:"reqId,omitempty"`
+		Aimsid string               `json:"aimsid,omitempty"`
+		Params *getHistoryReqParams `json:"params,omitempty"`
 	}
 	getHistoryReqParams struct {
 		Sn           string `json:"sn,omitempty"`
@@ -116,11 +116,11 @@ type (
 	}
 
 	getHistoryRsp struct {
-		Timestamp int64           `json:"ts,omitempty"`
-		Status    *responseStatus `json:"status,omitempty"`
-		Method    string          `json:"method,omitempty"`
-		ReqId     string          `json:"reqId,omitempty"`
-		Results   *responseResult `json:"results,omitempty"`
+		Timestamp int64                `json:"ts,omitempty"`
+		Status    *getHistoryRspStatus `json:"status,omitempty"`
+		Method    string               `json:"method,omitempty"`
+		ReqId     string               `json:"reqId,omitempty"`
+		Results   *getHistoryRspResult `json:"results,omitempty"`
 	}
 
 	getHistoryRspStatus struct {
@@ -185,11 +185,12 @@ type (
 )
 
 func NewICQApi(aimsid string) (icqApi *ICQApi) {
-	icqApi.aimsid = aimsid
-	icqApi.client = &http.Client{
-		Timeout: 3 * time.Second,
+	return &ICQApi{
+		aimsid: aimsid,
+		client: &http.Client{
+			Timeout: 3 * time.Second,
+		},
 	}
-	return icqApi
 }
 
 func (m *ICQApi) dumpHistroyFromChat(chatId string) (e error) {
@@ -350,28 +351,26 @@ func (m *ICQApi) parseChatResponse(chatResponse *getBuddyListRsp) (chats []strin
 
 func (m *ICQApi) getChatsMessages(chatIds []string) (e error) {
 	for _, v := range chatIds {
-		for lastMsgId := 1; lastMsgId != 0; {
-			if lastMsgId, e = m.getChatMessages(v, lastMsgId); e != nil {
-				break
-			}
+		if e = m.getChatMessages(v, 1); e != nil {
+			break
 		}
 	}
 
 	return e
 }
 
-func (m *ICQApi) getChatMessages(chatId string, fromMsgId uint64) (lastMsgId uint64, e error) {
+func (m *ICQApi) getChatMessages(chatId string, fromMsgId uint64) (e error) {
 
 	gLogger.Debug().Str("chatId", chatId).Msg("Trying to fetch messages for chat")
 
 	var reqId uuid.UUID
 	if reqId, e = uuid.NewV4(); e != nil {
-		return 0, e
+		return e
 	}
 
 	var reqUrl *url.URL
 	if reqUrl, e = url.Parse("https://botapi.icq.net/rapi"); e != nil {
-		return 0, e
+		return e
 	}
 
 	var buf *bytes.Buffer
@@ -380,12 +379,12 @@ func (m *ICQApi) getChatMessages(chatId string, fromMsgId uint64) (lastMsgId uin
 			chatId, fromMsgId, 100, "init",
 		},
 	}); e != nil {
-		return 0, e
+		return e
 	}
 
 	var req *http.Request
-	if req, e = m.client.NewRequest("POST", reqUrl.String(), buf); e != nil {
-		return 0, e
+	if req, e = http.NewRequest("POST", reqUrl.String(), buf); e != nil {
+		return e
 	}
 
 	req.Header.Add("Content-Type", "application/json")
@@ -395,31 +394,40 @@ func (m *ICQApi) getChatMessages(chatId string, fromMsgId uint64) (lastMsgId uin
 
 	var rsp *http.Response
 	if rsp, e = m.client.Do(req); e != nil {
-		return 0, e
+		return e
 	}
 	defer rsp.Body.Close()
 
-	var messages []*getHistoryRspResultMessage
-	if messages, e = m.getChatMessagesResponse(rsp.Body); e != nil {
-		return 0, e
-	}
-
-	return parseChatMessagesResponse(chatId, messages)
-}
-
-func (m *ICQApi) getChatMessagesResponse(r *io.ReadCloser) (e error) {
-
-	var data []byte
-	if data, e = ioutil.ReadAll(*r); e != nil {
+	var messagesResponse *getHistoryRsp
+	if messagesResponse, e = m.getChatMessagesResponse(&rsp.Body); e != nil {
 		return e
 	}
 
-	var messagesResponse *getHistoryRsp
-	if e = json.Unmarshal(data, messagesResponse); e != nil {
+	var lastMsgId uint64
+	if lastMsgId, e = m.parseChatMessagesResponse(chatId, messagesResponse.Results.Messages); e != nil {
+		return e
+	}
+
+	// recursive calls
+	if e = m.getChatMessages(chatId, lastMsgId); e != nil {
 		return e
 	}
 
 	return e
+}
+
+func (m *ICQApi) getChatMessagesResponse(r *io.ReadCloser) (messagesResponse *getHistoryRsp, e error) {
+
+	var data []byte
+	if data, e = ioutil.ReadAll(*r); e != nil {
+		return nil, e
+	}
+
+	if e = json.Unmarshal(data, messagesResponse); e != nil {
+		return nil, e
+	}
+
+	return messagesResponse, e
 }
 
 func (m *ICQApi) parseChatMessagesResponse(chatId string, messages []*getHistoryRspResultMessage) (lastMsgId uint64, e error) {
@@ -441,11 +449,11 @@ func (m *ICQApi) parseChatMessagesResponse(chatId string, messages []*getHistory
 		})
 	}
 
-	if e = gMongoDB.UpdateOne("chats", &bson.M{
+	if e = gMongoDB.UpdateOne("chats", bson.M{
 		"aimId": chatId,
 	}, bson.M{
 		"$push": bson.M{
-			"aimId.$.messages": *chatMessages,
+			"aimId.$.messages": chatMessages,
 		},
 	}); e != nil {
 		return 0, e
