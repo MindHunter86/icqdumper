@@ -3,7 +3,7 @@ package app
 import (
 	"bytes"
 	"encoding/json"
-	"fmt"
+	"io"
 	"io/ioutil"
 	"net/http"
 	"net/url"
@@ -14,83 +14,88 @@ import (
 
 type (
 	ICQApi struct {
-		Aimsid string
-		Client *http.Client
+		aimsid string
+		client *http.Client
 	}
 
 	icqApiResponse struct {
-		Timestamp uint64            `json:"ts"`
-		Status    *responseStatus   `json:"status"`
-		Method    string            `json:"method"`
-		ReqId     string            `json:"reqid"`
-		Results   []*responseResult `json:"results"`
+		Timestamp uint64          `json:"ts,omitempty"`
+		Status    *responseStatus `json:"status,omitempty"`
+		Method    string          `json:"method,omitempty"`
+		ReqId     string          `json:"reqId,omitempty"`
+		Results   *responseResult `json:"results,omitempty"`
 	}
 
 	responseStatus struct {
-		Code int `json:"code"`
+		Code int `json:"code,omitempty"`
 	}
 
 	responseResult struct {
-		Messages     []*resultMessage `json:"messages"`
-		LastMsgId    uint64           `json:"lastmsgid"`
-		PatchVersion string           `json:"patchversion"`
-		Yours        *resultYours     `json:"yours"`
-		Unreads      uint             `json:"unreads"`
-		UnreadCnt    uint             `json:"unreadcnt"`
-		Path         []*resultPatch   `json:"path"`
-		Persons      []*resultPerson  `json:"persons"`
+		Messages     []*resultMessage `json:"messages,omitempty"`
+		LastMsgId    int              `json:"lastMsgId,omitempty"`
+		PatchVersion string           `json:"patchVersion,omitempty"`
+		Yours        *resultYours     `json:"yours,omitempty"`
+		Unreads      int              `json:"ureads,omitempty"`
+		UnreadCnt    int              `json:"unreadCnt,omitempty"`
+		Patch        []*resultPatch   `json:"patch,omitempty"`
+		Persons      []*resultPerson  `json:"persons,omitempty"`
 	}
 
 	resultYours struct {
-		LastRead        uint64 `json:"lastread"`
-		LastDelivered   uint64 `json:"lastdelivered"`
-		LastReadMention uint64 `json:"lastreadmention"`
+		LastRead        uint64 `json:"lastRead,omitempty"`
+		LastDelivered   uint64 `json:"lastDelivered,omitempty"`
+		LastReadMention uint64 `json:"lastReadMention,omitempty"`
 	}
 
 	resultPatch struct {
-		MsgId   uint64 `json:"msgid"`
-		Pa_type string `json:"type"`
+		MsgId   uint64 `json:"msgId,omitempty"`
+		Pa_type string `json:"type,omitempty"`
 	}
 
 	resultPerson struct {
-		Sn        string `json:"sn"`
-		Role      string `json:"role"`
-		Friendly  string `json:"friendly"`
-		FirstName string `json:"firstname"`
-		LastName  string `json:"lastname"`
+		Sn        string `json:"sn,omitempty"`
+		Role      string `json:"role,omitempty"`
+		Friendly  string `json:"friendly,omitempty"`
+		FirstName string `json:"firstName,omitempty"`
+		LastName  string `json:"lastName,omitempty"`
+		Nick      string `json:"nick,omitempty"`
+		NickName  string `json:"nickname,omitempty"`
 	}
 
 	resultMessage struct {
-		MsgId uint64       `json:"msgid"`
-		Time  uint64       `json:"time"`
-		Wid   string       `json:"wid"`
-		Chat  *messageChat `json:"chat"`
-		Text  string       `json:"text"`
+		ReadsCount int          `json:"-"`
+		MsgId      uint64       `json:"msgId,omitempty"`
+		Time       uint64       `json:"time,omitempty"`
+		Wid        string       `json:"wid,omitempty"`
+		Chat       *messageChat `json:"chat,omitempty"`
+		Text       string       `json:"text,omitempty"`
+		Outgoing   bool         `json:"-"`
+		Snippets   interface{}  `json:"-"`
 	}
 
 	messageChat struct {
-		Senders     string           `json:"senders"`
-		Name        string           `json:"name"`
-		MemberEvent *chatMemberEvent `json:"memberevent"`
+		Sender      string      `json:"sender,omitempty"`
+		Name        string      `json:"name,omitempty"`
+		MemberEvent interface{} `json:"-"`
 	}
 
 	chatMemberEvent struct {
-		Ev_type string   `json:"type"`
-		Role    string   `json:"role"`
-		Members []string `json:"members"`
+		Ev_type string   `json:"type,omitempty"`
+		Role    string   `json:"role,omitempty"`
+		Members []string `json:"members,omitempty"`
 	}
 
 	icqRequest struct {
-		Method string         `json:"method"`
-		ReqId  string         `json:"reqId"`
-		Aimsid string         `json:"aimsid"`
-		Params *requestParams `json:"params"`
+		Method string         `json:"method,omitempty"`
+		ReqId  string         `json:"reqId,omitempty"`
+		Aimsid string         `json:"aimsid,omitempty"`
+		Params *requestParams `json:"params,omitempty"`
 	}
 	requestParams struct {
-		Sn           string `json:"sn"`
-		FromMsgId    int    `json:"fromMsgId"`
-		Count        int    `json:"count"`
-		PatchVersion string `json:"patchVersion"`
+		Sn           string `json:"sn,omitempty"`
+		FromMsgId    uint64 `json:"fromMsgId,omitempty"`
+		Count        int    `json:"count,omitempty"`
+		PatchVersion string `json:"patchVersion,omitempty"`
 	}
 )
 
@@ -98,27 +103,40 @@ func NewICQApi(aimsid string) *ICQApi {
 	return &ICQApi{
 		aimsid: aimsid,
 		client: &http.Client{
-			Timeout: time.Second * 1, // todo - add this to cli.Flags
+			Timeout: time.Second * 3, // todo - add this to cli.Flags
 		},
 	}
 }
 
 func (m *ICQApi) dumpHistroyFromChat(chatId string) (e error) {
+	var lastMsgId uint64 = 1
+
+	gLogger.Debug().Msg("Start dumpHistroy loop")
+	for e == nil {
+		lastMsgId, e = m.dumpPartialHistroy(chatId, lastMsgId)
+	}
+
+	return e
+}
+
+func (m *ICQApi) dumpPartialHistroy(chatId string, fromMsgId uint64) (lastMsgId uint64, e error) {
+
+	gLogger.Debug().Str("chatId", chatId).Uint64("fromMsgId", fromMsgId).Msg("Start ICQ API reqeust builder")
 
 	var reqUrl *url.URL
 	if reqUrl, e = url.Parse("https://botapi.icq.net/rapi"); e != nil {
-		return e
+		return 0, e
 	}
 
 	var buf = new(bytes.Buffer)
 
 	var reqId uuid.UUID
 	if reqId, e = uuid.NewV4(); e != nil {
-		return e
+		return 0, e
 	}
 
 	var reqBodyParams = &requestParams{
-		chatId, 6369479187785847000 - 1, 100, "init",
+		chatId, fromMsgId, 10, "init",
 	}
 	var reqBody = &icqRequest{
 		"getHistory", reqId.String(), m.aimsid,
@@ -126,14 +144,12 @@ func (m *ICQApi) dumpHistroyFromChat(chatId string) (e error) {
 	}
 
 	if e = json.NewEncoder(buf).Encode(reqBody); e != nil {
-		return e
+		return 0, e
 	}
-
-	fmt.Println(buf.String())
 
 	var req *http.Request
 	if req, e = http.NewRequest("POST", reqUrl.String(), buf); e != nil {
-		return e
+		return 0, e
 	}
 
 	req.Header.Add("Content-Type", "application/json")
@@ -143,15 +159,36 @@ func (m *ICQApi) dumpHistroyFromChat(chatId string) (e error) {
 
 	var rsp *http.Response
 	if rsp, e = m.client.Do(req); e != nil {
-		return e
+		return 0, e
 	}
 	defer rsp.Body.Close()
 
-	if tmp, e := ioutil.ReadAll(rsp.Body); e != nil {
-		return e
-	} else {
-		gLogger.Info().Str("body", string(tmp)).Msg("New response from ICQ API!")
+	return m.parseApiResponse(&rsp.Body)
+}
+
+func (m *ICQApi) parseApiResponse(r *io.ReadCloser) (lastMsgId uint64, e error) {
+
+	var data []byte
+	if data, e = ioutil.ReadAll(*r); e != nil {
+		return 0, e
 	}
 
-	return e
+	var apiResponse = new(icqApiResponse)
+	if e = json.Unmarshal(data, apiResponse); e != nil {
+		return 0, e
+	}
+
+	m.apiResultDebug(apiResponse)
+	return m.getLastMessageFromResponse(apiResponse.Results.Messages), e
+}
+
+func (m *ICQApi) getLastMessageFromResponse(messages []*resultMessage) (lastMsgId uint64) {
+	lastMsgId = messages[len(messages)-1].MsgId
+	return lastMsgId
+}
+
+func (m *ICQApi) apiResultDebug(res *icqApiResponse) {
+	for i := 0; i < len(res.Results.Messages); i++ {
+		gLogger.Info().Str("author", res.Results.Messages[i].Chat.Sender).Str("msg", res.Results.Messages[i].Text).Uint64("mid", res.Results.Messages[i].MsgId).Msg("message parsed")
+	}
 }
