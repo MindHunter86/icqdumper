@@ -14,8 +14,9 @@ type App struct {
 	icqClient *ICQApi
 }
 
-func NewApp(l *zerolog.Logger) *App {
+func NewApp(l *zerolog.Logger, m *mongodb.MongoDB) *App {
 	gLogger = l
+	gMongoDB = m
 	return &App{}
 }
 

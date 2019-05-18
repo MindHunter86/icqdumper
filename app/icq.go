@@ -3,6 +3,7 @@ package app
 import (
 	"bytes"
 	"encoding/json"
+	"errors"
 	"io"
 	"io/ioutil"
 	"net/http"
@@ -116,11 +117,11 @@ type (
 	}
 
 	getHistoryRsp struct {
-		Timestamp int64                `json:"ts,omitempty"`
-		Status    *getHistoryRspStatus `json:"status,omitempty"`
-		Method    string               `json:"method,omitempty"`
-		ReqId     string               `json:"reqId,omitempty"`
-		Results   *getHistoryRspResult `json:"results,omitempty"`
+		Timestamp uint64 `json:"ts,omitempty"`
+		//		Status    interface{}          `json:"-"`
+		Method  string               `json:"method,omitempty"`
+		ReqId   string               `json:"reqId,omitempty"`
+		Results *getHistoryRspResult `json:"results,omitempty"`
 	}
 
 	getHistoryRspStatus struct {
@@ -134,8 +135,8 @@ type (
 		Yours        *getHistoryRspResultYours     `json:"yours,omitempty"`
 		Unreads      int                           `json:"ureads,omitempty"`
 		UnreadCnt    int                           `json:"unreadCnt,omitempty"`
-		Patch        []*interface{}                `json:"-"`
-		Persons      []*interface{}                `json:"-"`
+		Patch        []interface{}                 `json:"-"`
+		Persons      []interface{}                 `json:"-"`
 	}
 
 	getHistoryRspResultYours struct {
@@ -319,7 +320,7 @@ func (m *ICQApi) getChatsResponse(r *io.ReadCloser) (chats []string, e error) {
 	}
 
 	var chatsResponse = new(getBuddyListRsp)
-	if e = json.Unmarshal(data, chatsResponse); e != nil {
+	if e = json.Unmarshal(data, &chatsResponse); e != nil {
 		return nil, e
 	}
 
@@ -361,7 +362,7 @@ func (m *ICQApi) getChatsMessages(chatIds []string) (e error) {
 
 func (m *ICQApi) getChatMessages(chatId string, fromMsgId uint64) (e error) {
 
-	gLogger.Debug().Str("chatId", chatId).Msg("Trying to fetch messages for chat")
+	gLogger.Debug().Str("chatId", chatId).Uint64("lastMsgId", fromMsgId).Msg("Trying to fetch messages for chat")
 
 	var reqId uuid.UUID
 	if reqId, e = uuid.NewV4(); e != nil {
@@ -373,7 +374,7 @@ func (m *ICQApi) getChatMessages(chatId string, fromMsgId uint64) (e error) {
 		return e
 	}
 
-	var buf *bytes.Buffer
+	var buf = new(bytes.Buffer)
 	if e = json.NewEncoder(buf).Encode(&getHistoryReq{
 		"getHistory", reqId.String(), m.aimsid, &getHistoryReqParams{
 			chatId, fromMsgId, 100, "init",
@@ -398,13 +399,17 @@ func (m *ICQApi) getChatMessages(chatId string, fromMsgId uint64) (e error) {
 	}
 	defer rsp.Body.Close()
 
+	if rsp.StatusCode != 200 {
+		return errors.New("ICQ api send non 200 OK")
+	}
+
 	var messagesResponse *getHistoryRsp
 	if messagesResponse, e = m.getChatMessagesResponse(&rsp.Body); e != nil {
 		return e
 	}
 
 	var lastMsgId uint64
-	if lastMsgId, e = m.parseChatMessagesResponse(chatId, messagesResponse.Results.Messages); e != nil {
+	if lastMsgId, e = m.parseChatMessagesResponse(chatId, messagesResponse.Results.Messages); e != nil || lastMsgId == 0 {
 		return e
 	}
 
@@ -423,7 +428,7 @@ func (m *ICQApi) getChatMessagesResponse(r *io.ReadCloser) (messagesResponse *ge
 		return nil, e
 	}
 
-	if e = json.Unmarshal(data, messagesResponse); e != nil {
+	if e = json.Unmarshal(data, &messagesResponse); e != nil {
 		return nil, e
 	}
 

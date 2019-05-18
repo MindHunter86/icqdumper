@@ -6,6 +6,8 @@ import (
 	"sort"
 	"time"
 
+	"github.com/MindHunter86/icqdumper/system/mongodb"
+
 	application "github.com/MindHunter86/icqdumper/app"
 	"github.com/rs/zerolog"
 	"gopkg.in/urfave/cli.v1"
@@ -102,7 +104,16 @@ func main() {
 					zerolog.SetGlobalLevel(zerolog.NoLevel)
 				}
 
-				return application.NewApp(&log).CliGetHistory(c.String("aimsid"), c.String("chat"))
+				var mongodbDriver *mongodb.MongoDB
+				if mongodbDriver, e = mongodb.NewMongoDriver(&log, c.String("mongodb")); e != nil {
+					return e
+				}
+
+				if e = mongodbDriver.Construct(); e != nil {
+					return e
+				}
+
+				return application.NewApp(&log, mongodbDriver).CliGetHistory(c.String("aimsid"), c.String("chat"))
 			},
 		},
 		{

@@ -59,12 +59,13 @@ user : icqdumper
 pass : CHFiEEt9oQV05bMO6sudNRQ1 */
 
 func NewMongoDriver(l *zerolog.Logger, mURI string) (mDriver *MongoDB, e error) {
+	mDriver = &MongoDB{}
 	if mDriver.client, e = mongo.NewClient(options.Client().ApplyURI(mURI)); e != nil {
 		return nil, e
 	}
 
 	mDriver.log = l
-	mDriver.log.Info().Msg("MongoDB driver has been successfully inited")
+	mDriver.log.Info().Str("mURI", mURI).Msg("MongoDB driver has been successfully inited")
 	return mDriver, e
 }
 
