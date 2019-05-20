@@ -136,13 +136,14 @@ func (m *MongoDB) dbUpdateOne(collection string, filter interface{}, data interf
 	ctx, cncl := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cncl()
 
-	var res *mongo.UpdateResult
-	if res, e = m.client.Database("icqdumper").Collection(collection).UpdateOne(ctx, filter, data); e == nil {
-		m.log.Info().Int64("matched", res.MatchedCount).Int64("modified", res.ModifiedCount).
-			Msg("Some records in collection has been successfully updated")
+	//	var res *mongo.UpdateResult
+	if _, e = m.client.Database("icqdumper").Collection(collection).UpdateOne(ctx, filter, data); e == nil {
+		return
+		//		m.log.Info().Int64("matched", res.MatchedCount).Int64("modified", res.ModifiedCount).
+		//			Msg("Some records in collection has been successfully updated")
 	}
 
-	return e
+	return
 }
 
 func (m *MongoDB) dbUpdateMany(collection string, filter interface{}, data interface{}) (e error) {
@@ -155,7 +156,7 @@ func (m *MongoDB) dbUpdateMany(collection string, filter interface{}, data inter
 			Msg("Some records in collection has been successfully updated")
 	}
 
-	return e
+	return
 }
 
 func (m *MongoDB) Construct() error { return m.dbConnect() }

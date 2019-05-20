@@ -367,7 +367,7 @@ func (m *ICQApi) parseChatResponse(chatResponse *getBuddyListRsp) (chats []strin
 func (m *ICQApi) getChatsMessages(chatIds []string) (e error) {
 	for _, v := range chatIds {
 		gLogger.Debug().Str("chatid", v).Msg("Add chat parsing to queue")
-		gQueue <- &job{
+		gChatsQueue <- &job{
 			action:  jobActCustomFunc,
 			payload: []interface{}{m, v},
 			payloadFunc: func(args []interface{}) error {
@@ -431,32 +431,15 @@ func (m *ICQApi) getChatMessages(chatId string, fromMsgId uint64) (e error) {
 		return e
 	}
 
-	gQueue <- &job{
-		action:  jobActCustomFunc,
-		payload: []interface{}{m, chatId, messagesResponse.Results.Messages},
-		payloadFunc: func(args []interface{}) (err error) {
-			var iApi = args[0].(*ICQApi)
-			var cId = args[1].(string)
-			var messages = args[2].([]*getHistoryRspResultMessage)
-
-			var lastMsgId uint64
-			if lastMsgId, err = iApi.parseChatMessagesResponse(cId, messages); err != nil || lastMsgId == 0 {
-				return
-			}
-
-			return iApi.getChatMessages(cId, lastMsgId)
-		},
+	var lastMsgId uint64
+	if lastMsgId, e = m.parseChatMessagesResponse(chatId, messagesResponse.Results.Messages); e != nil || lastMsgId == 0 {
+		return e
 	}
 
-	//	var lastMsgId uint64
-	//	if lastMsgId, e = m.parseChatMessagesResponse(chatId, messagesResponse.Results.Messages); e != nil || lastMsgId == 0 {
-	//		return e
-	//	}
-	//
-	//	// recursive calls
-	//	if e = m.getChatMessages(chatId, lastMsgId); e != nil {
-	//		return e
-	//	}
+	//	recursive calls
+	if e = m.getChatMessages(chatId, lastMsgId); e != nil {
+		return e
+	}
 
 	return e
 }
@@ -484,21 +467,25 @@ func (m *ICQApi) parseChatMessagesResponse(chatId string, messages []*getHistory
 
 	lastMsgId = messages[len(messages)-1].MsgId
 	for _, v := range messages {
-		e = gMongoDB.UpdateOne("chats", bson.M{
-			"aimId": chatId,
-		}, bson.M{
-			"$push": bson.M{
-				"messages": &mongodb.CollectionChatsMessage{
-					MsgId:  v.MsgId,
-					Time:   time.Unix(v.Time, 0),
-					Wid:    v.Wid,
-					Sender: v.Chat.Sender,
-					Text:   v.Text,
-				},
+		gDBQueue <- &job{
+			action:  jobActCustomFunc,
+			payload: []interface{}{v},
+			payloadFunc: func(args []interface{}) error {
+				var message = args[0].(*getHistoryRspResultMessage)
+				return gMongoDB.UpdateOne("chats", bson.M{
+					"aimId": chatId,
+				}, bson.M{
+					"$push": bson.M{
+						"messages": &mongodb.CollectionChatsMessage{
+							MsgId:  message.MsgId,
+							Time:   time.Unix(message.Time, 0),
+							Wid:    message.Wid,
+							Sender: message.Chat.Sender,
+							Text:   message.Text,
+						},
+					},
+				})
 			},
-		})
-		if e != nil {
-			return 0, e
 		}
 	}
 

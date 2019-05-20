@@ -11,16 +11,18 @@ import (
 )
 
 var (
-	gLogger  *zerolog.Logger
-	gMongoDB *mongodb.MongoDB
-	gQueue   chan *job
+	gLogger     *zerolog.Logger
+	gMongoDB    *mongodb.MongoDB
+	gChatsQueue chan *job
+	gDBQueue    chan *job
 )
 
 type (
 	App struct {
-		params          *AppParams
-		icqClient       *ICQApi
-		queueDispatcher *dispatcher
+		params             *AppParams
+		icqClient          *ICQApi
+		chatsDispatcher    *dispatcher
+		databaseDispatcher *dispatcher
 	}
 	AppParams struct {
 		Silent                               bool
@@ -52,8 +54,11 @@ func (m *App) Bootstrap(chatId string) (e error) {
 	}
 
 	gLogger.Debug().Msg("Queue bootstrap...")
-	m.queueDispatcher = newDispatcher(m.params.QueueBuffer, m.params.WorkerCapacity)
-	gQueue = m.queueDispatcher.getQueueChan()
+	m.chatsDispatcher = newDispatcher(m.params.QueueBuffer, m.params.WorkerCapacity)
+	gChatsQueue = m.chatsDispatcher.getQueueChan()
+
+	m.databaseDispatcher = newDispatcher(m.params.QueueBuffer, m.params.WorkerCapacity)
+	gDBQueue = m.databaseDispatcher.getQueueChan()
 
 	// bootstrap part
 	var kernSignal = make(chan os.Signal)
@@ -66,8 +71,16 @@ func (m *App) Bootstrap(chatId string) (e error) {
 		wg.Add(1)
 		defer wg.Done()
 
-		gLogger.Debug().Msg("Queue worker spawn && Queue dispatch...")
-		ep <- m.queueDispatcher.bootstrap(m.params.Workers)
+		gLogger.Debug().Msg("Queue CHAT worker spawn && Queue dispatch...")
+		ep <- m.chatsDispatcher.bootstrap(m.params.Workers)
+	}(errorPipe, waitGroup)
+
+	go func(ep chan error, wg sync.WaitGroup) {
+		wg.Add(1)
+		defer wg.Done()
+
+		gLogger.Debug().Msg("Queue DB worker spawn && Queue dispatch...")
+		ep <- m.databaseDispatcher.bootstrap(m.params.Workers)
 	}(errorPipe, waitGroup)
 
 	go func(ep chan error, wg sync.WaitGroup) {
@@ -91,10 +104,13 @@ LOOP:
 	}
 
 	waitGroup.Wait()
-	return e
+	return m.Destroy()
 }
 
-func (*App) Destroy() (e error) {
+func (m *App) Destroy() (e error) {
+	m.databaseDispatcher.destroy()
+	m.chatsDispatcher.destroy()
+	gMongoDB.Destruct()
 	return e
 }
 

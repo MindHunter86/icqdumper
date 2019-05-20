@@ -57,17 +57,17 @@ func main() {
 		},
 		cli.IntFlag{
 			Name:  "workers",
-			Value: 32,
+			Value: 128,
 			Usage: "Workers count for parsing and saving chats and messages",
 		},
 		cli.IntFlag{
 			Name:  "queuebuffer",
-			Value: 10240,
+			Value: 1024000,
 			Usage: "Number of unassigned buffered jobs",
 		},
 		cli.IntFlag{
 			Name:  "workercapacity",
-			Value: 32,
+			Value: 1024,
 			Usage: "Number of assigned buffered jobs",
 		},
 	}
