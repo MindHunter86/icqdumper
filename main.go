@@ -32,7 +32,7 @@ func main() {
 			Name:  "Vadimka Komissarov",
 			Email: "v.komissarov@corp.mail.ru, v.komissarov@corp.vk.com, vadimka_kom@mail.ru"}}
 	app.Copyright = "(c) 2019 Mindhunter and CO"
-	app.Usage = "MNT helper for cloud services control"
+	app.Usage = "Dump history from ICQ chats"
 
 	// define global flags:
 	var globAppFlags []cli.Flag = []cli.Flag{
