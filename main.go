@@ -11,6 +11,9 @@ import (
 	"gopkg.in/urfave/cli.v1"
 )
 
+// todo
+// -- add recover in mongodb.UpdateOne
+
 var log zerolog.Logger
 
 func main() {
