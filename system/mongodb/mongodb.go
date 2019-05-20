@@ -106,7 +106,8 @@ func (m *MongoDB) dbInsertOne(collection string, data *interface{}) (e error) {
 	ctx, cncl := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cncl()
 
-	if res, e := m.client.Database("icqdumper").Collection(collection).InsertOne(ctx, data); e == nil {
+	var res *mongo.InsertOneResult
+	if res, e = m.client.Database("icqdumper").Collection(collection).InsertOne(ctx, *data); e == nil {
 		m.log.Info().Str("inserted id", res.InsertedID.(primitive.ObjectID).Hex()).
 			Msg("New record has been successfully writed")
 	}
@@ -118,7 +119,11 @@ func (m *MongoDB) dbInsertMany(collection string, data *[]interface{}) (e error)
 	ctx, cncl := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cncl()
 
-	if res, e := m.client.Database("icqdumper").Collection(collection).InsertMany(ctx, *data); e == nil {
+	m.log.Debug().Msg("Hey, I'm here!")
+
+	var res *mongo.InsertManyResult
+	if res, e = m.client.Database("icqdumper").Collection(collection).InsertMany(ctx, *data); e == nil {
+		m.log.Debug().Msg("MONGO OK")
 		for _, v := range res.InsertedIDs {
 			m.log.Info().Str("inserted id", v.(primitive.ObjectID).Hex()).Msg("New record has been successfully writed")
 		}
@@ -131,7 +136,8 @@ func (m *MongoDB) dbUpdateOne(collection string, filter interface{}, data interf
 	ctx, cncl := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cncl()
 
-	if res, e := m.client.Database("icqdumper").Collection(collection).UpdateOne(ctx, filter, data); e == nil {
+	var res *mongo.UpdateResult
+	if res, e = m.client.Database("icqdumper").Collection(collection).UpdateOne(ctx, filter, data); e == nil {
 		m.log.Info().Int64("matched", res.MatchedCount).Int64("modified", res.ModifiedCount).
 			Msg("Some records in collection has been successfully updated")
 	}

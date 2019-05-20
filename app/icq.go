@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"io"
 	"io/ioutil"
 	"net/http"
@@ -164,6 +165,9 @@ type (
 
 	// GET /getBuddyList
 	getBuddyListRsp struct {
+		Response *getBuddyListRspResponse `json:response`
+	}
+	getBuddyListRspResponse struct {
 		StatusCode int                  `json:"statusCode,omitempty"`
 		StatusText string               `json:"statusText,omitempty"`
 		Data       *getBuddyListRspData `json:"data,omitempty"`
@@ -319,11 +323,14 @@ func (m *ICQApi) getChatsResponse(r *io.ReadCloser) (chats []string, e error) {
 		return nil, e
 	}
 
+	fmt.Println(string(data))
+
 	var chatsResponse = new(getBuddyListRsp)
 	if e = json.Unmarshal(data, &chatsResponse); e != nil {
 		return nil, e
 	}
 
+	fmt.Println(chatsResponse.Response.StatusText)
 	gLogger.Info().Msg("ICQ api request has been successfully parsed")
 	return m.parseChatResponse(chatsResponse)
 }
@@ -331,11 +338,12 @@ func (m *ICQApi) getChatsResponse(r *io.ReadCloser) (chats []string, e error) {
 func (m *ICQApi) parseChatResponse(chatResponse *getBuddyListRsp) (chats []string, e error) {
 
 	var chatsCollections []interface{}
-	for _, v := range chatResponse.Data.Groups {
+	fmt.Println(chatResponse.Response.StatusCode)
+	for _, v := range chatResponse.Response.Data.Groups {
 		for _, v2 := range v.Buddies {
 			chats = append(chats, v2.AimId)
 
-			chatsCollections = append(chatsCollections, &mongodb.CollectionChats{
+			chatsCollections = append(chatsCollections, mongodb.CollectionChats{
 				ID:    primitive.NewObjectID(),
 				Name:  v2.Friendly,
 				AimId: v2.AimId,
