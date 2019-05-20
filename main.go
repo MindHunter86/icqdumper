@@ -6,8 +6,6 @@ import (
 	"sort"
 	"time"
 
-	"github.com/MindHunter86/icqdumper/system/mongodb"
-
 	application "github.com/MindHunter86/icqdumper/app"
 	"github.com/rs/zerolog"
 	"gopkg.in/urfave/cli.v1"
@@ -37,12 +35,6 @@ func main() {
 	// define global flags:
 	var globAppFlags []cli.Flag = []cli.Flag{
 		cli.StringFlag{
-			Name:   "aimsid, a",
-			Value:  "",
-			EnvVar: "ICQ_AIMSID",
-			Usage:  "Bot or client AIMSID (megabot(70001) can help you)",
-		},
-		cli.StringFlag{
 			Name:  "loglevel, l",
 			Value: "debug",
 			Usage: "Dumper log level (debug, info, warn, error, fatal, panic) [debug]",
@@ -52,10 +44,31 @@ func main() {
 			Usage: "",
 		},
 		cli.StringFlag{
+			Name:   "aimsid, a",
+			Value:  "",
+			EnvVar: "ICQ_AIMSID",
+			Usage:  "Bot or client AIMSID (megabot(70001) can help you)",
+		},
+		cli.StringFlag{
 			Name:   "mongodb, m",
 			Value:  "",
 			EnvVar: "ICQ_MONGODB",
 			Usage:  "mongodb connection string",
+		},
+		cli.IntFlag{
+			Name:  "workers",
+			Value: 4,
+			Usage: "Workers count for parsing and saving chats and messages",
+		},
+		cli.IntFlag{
+			Name:  "queuebuffer",
+			Value: 1024,
+			Usage: "Number of unassigned buffered jobs",
+		},
+		cli.IntFlag{
+			Name:  "workercapacity",
+			Value: 32,
+			Usage: "Number of assigned buffered jobs",
 		},
 	}
 
@@ -104,16 +117,17 @@ func main() {
 					zerolog.SetGlobalLevel(zerolog.NoLevel)
 				}
 
-				var mongodbDriver *mongodb.MongoDB
-				if mongodbDriver, e = mongodb.NewMongoDriver(&log, c.String("mongodb")); e != nil {
-					return e
-				}
+				var app *application.App = application.NewApp(&log, &application.AppParams{
+					Silent:         c.Bool("silent"),
+					AimSid:         c.String("aimsid"),
+					MongoConn:      c.String("mongodb"),
+					Workers:        c.Int("workers"),
+					QueueBuffer:    c.Int("queuebuffer"),
+					WorkerCapacity: c.Int("workercapacity"),
+				})
 
-				if e = mongodbDriver.Construct(); e != nil {
-					return e
-				}
-
-				return application.NewApp(&log, mongodbDriver).CliGetHistory(c.String("aimsid"), c.String("chat"))
+				return app.Bootstrap()
+				//				return application.NewApp(&log, mongodbDriver).CliGetHistory(c.String("aimsid"), c.String("chat"))
 			},
 		},
 		{

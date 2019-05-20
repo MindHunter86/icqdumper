@@ -1,6 +1,11 @@
 package app
 
 import (
+	"os"
+	"os/signal"
+	"sync"
+	"syscall"
+
 	"github.com/MindHunter86/icqdumper/system/mongodb"
 	"github.com/rs/zerolog"
 )
@@ -8,24 +13,76 @@ import (
 var (
 	gLogger  *zerolog.Logger
 	gMongoDB *mongodb.MongoDB
+	gQueue   chan *job
 )
 
-type App struct {
-	icqClient *ICQApi
-}
+type (
+	App struct {
+		params          *AppParams
+		icqClient       *ICQApi
+		queueDispatcher *dispatcher
+	}
+	AppParams struct {
+		Silent                               bool
+		AimSid, MongoConn                    string
+		Workers, QueueBuffer, WorkerCapacity int
+	}
+)
 
-func NewApp(l *zerolog.Logger, m *mongodb.MongoDB) *App {
+func NewApp(l *zerolog.Logger, params *AppParams) *App {
 	gLogger = l
-	gMongoDB = m
-	return &App{}
-}
 
-func (m *App) Create() (*App, error) {
-	var e error
-	return m, e
+	return &App{
+		params: params,
+	}
 }
 
 func (m *App) Bootstrap() (e error) {
+
+	gLogger.Debug().Msg("Starting App initialization...")
+
+	gLogger.Debug().Msg("MongoDB bootstrap...")
+	if gMongoDB, e = mongodb.NewMongoDriver(gLogger, m.params.MongoConn); e != nil {
+		return
+	}
+
+	gLogger.Debug().Msg("MongoDB database connect...")
+	if e = gMongoDB.Construct(); e != nil {
+		return e
+	}
+
+	gLogger.Debug().Msg("Queue bootstrap...")
+	m.queueDispatcher = newDispatcher(m.params.QueueBuffer, m.params.WorkerCapacity)
+	gQueue = m.queueDispatcher.getQueueChan()
+
+	// bootstrap part
+	var kernSignal = make(chan os.Signal)
+	signal.Notify(kernSignal, syscall.SIGINT, syscall.SIGTERM, syscall.SIGKILL, syscall.SIGQUIT)
+
+	var waitGroup sync.WaitGroup
+	var errorPipe chan error
+
+	go func(ep chan error, wg sync.WaitGroup) {
+		wg.Add(1)
+		defer wg.Done()
+		gLogger.Debug().Msg("Queue worker spawn && Queue dispatch...")
+		ep <- m.queueDispatcher.bootstrap(m.params.Workers)
+	}(errorPipe, waitGroup)
+
+LOOP:
+	for {
+		select {
+		case <-kernSignal:
+			gLogger.Info().Msg("Syscall.SIG* has been detected! Closing application...")
+			break LOOP
+		case e = <-errorPipe:
+			gLogger.Error().Err(e).Msg("Runtime error! Abnormal application closing!")
+			break LOOP
+		}
+	}
+
+	waitGroup.Wait()
+
 	return e
 }
 

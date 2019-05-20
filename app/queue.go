@@ -5,8 +5,8 @@ import (
 )
 
 const (
-	jobTypeParseChatMess = iota(uint8)
-	jobTypeSaveMessage
+	jobActParseChatMessages = uint8(iota)
+	jobActSaveChatMessage
 )
 
 const (
@@ -20,20 +20,28 @@ const (
 type (
 	job struct {
 		payload     interface{}
+		payloadFunc func(...interface{}) error
 		status      uint8
+		action      uint8
 		failedCount uint8
+	}
+	jobError struct {
+		e   error
+		job *job
 	}
 	worker struct {
 		pool  chan chan *job
 		inbox chan *job
 
-		done chan struct{}
+		done   chan struct{}
+		errors chan *jobError
 	}
 	dispatcher struct {
 		queue      chan *job
 		pool       chan chan *job
 		done       chan struct{}
 		workerDone chan struct{}
+		errorPipe  chan *jobError
 
 		workerCapacity int
 	}
@@ -46,22 +54,28 @@ func newDispatcher(queueBuffer, workerCapacity int) *dispatcher {
 		done:           make(chan struct{}, 1),
 		workerDone:     make(chan struct{}, 1),
 		workerCapacity: workerCapacity,
+		errorPipe:      make(chan *jobError),
 	}
 }
 
 func newWorker(dp *dispatcher) *worker {
 	return &worker{
-		pool:  dp.pool,
-		inbox: make(chan *job, dp.workerCapacity),
-		done:  dp.workerDone,
+		pool:   dp.pool,
+		inbox:  make(chan *job, dp.workerCapacity),
+		done:   dp.workerDone,
+		errors: dp.errorPipe,
 	}
 }
 
 func newJob() *job {
-	return &job{}
+	return &job{
+		status: jobStatusCreated,
+	}
 }
 
-func (m *dispatcher) bootstrap(workers int) {
+func (m *dispatcher) bootstrap(workers int) (e error) {
+	gLogger.Debug().Msg("Starting worker spawning...")
+
 	var waitGroup sync.WaitGroup
 	waitGroup.Add(workers + 1)
 
@@ -78,12 +92,17 @@ func (m *dispatcher) bootstrap(workers int) {
 		wg.Done()
 	}(waitGroup)
 
+	gLogger.Info().Int("workers count", workers).Msg("Workers has been spawned successfully")
 	waitGroup.Wait()
+
+	return
 }
 
 func (m *dispatcher) dispatch() {
 	var jbBuf *job
 	var nextWorker chan *job
+
+	gLogger.Info().Msg("Dispatching has been successfully started")
 
 	for {
 		select {
@@ -94,6 +113,13 @@ func (m *dispatcher) dispatch() {
 				nextWorker = <-m.pool
 				nextWorker <- jb
 			}(jbBuf)
+		case jbErr := <-m.errorPipe:
+			if jbErr.job.failedCount == 3 {
+				gLogger.Info().Msg("Trying to restart failed job...")
+				m.queue <- jbErr.job
+			} else {
+				gLogger.Error().Msg("Could not restart failed job! Fails count is more or equal 3!")
+			}
 		}
 	}
 }
@@ -114,25 +140,49 @@ func (m *worker) spawn() {
 		select {
 		case <-m.done:
 		case buf := <-m.inbox:
+			buf.setStatus(jobStatusPending)
 			m.doJob(buf)
 		}
 	}
-
 }
 
 func (m *worker) doJob(jb *job) {
 
+	switch jb.action {
+	case jobActParseChatMessages:
+	case jobActSaveChatMessage:
+	default:
+		if jb.payloadFunc != nil {
+			if e := jb.payloadFunc(); e != nil {
+				m.errors <- jb.newError(e)
+			}
+		} else {
+			gLogger.Warn().Msg("Job has undefined action")
+		}
+	}
 }
 
-func (m *job) setStatus(status uint8) (ok bool) {
-	m.status, ok = status
-	return ok
+func (m *job) setStatus(status uint8) {
+	if status == jobStatusFailed {
+		m.failedCount++
+	}
+
+	m.status = status
+}
+
+func (m *job) newError(e error) *jobError {
+	m.setStatus(jobStatusFailed)
+	gLogger.Warn().Err(e).Uint8("failed tries", m.failedCount).Msg("Could not exec job. Job state now is Failed")
+	return &jobError{
+		e:   e,
+		job: m,
+	}
 }
 
 func (m *job) parseChatMessages() (e error) {
-	return e
+	return
 }
 
 func (m *job) saveChatMessage(e error) {
-	return e
+	return
 }
