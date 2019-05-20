@@ -114,7 +114,7 @@ func (m *dispatcher) dispatch() {
 				nextWorker <- jb
 			}(jbBuf)
 		case jbErr := <-m.errorPipe:
-			if jbErr.job.failedCount == 3 {
+			if jbErr.job.failedCount != 3 {
 				gLogger.Info().Msg("Trying to restart failed job...")
 				m.queue <- jbErr.job
 			} else {

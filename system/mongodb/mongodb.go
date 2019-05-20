@@ -28,7 +28,7 @@ type (
 		ID       primitive.ObjectID       `bson:"_id"`
 		Name     string                   `bson:"name"`
 		AimId    string                   `bson:"aimId"`
-		Messages []CollectionChatsMessage `bson:"messages"`
+		Messages []CollectionChatsMessage `bson:"messages,omitempty"`
 	}
 	CollectionChatsMessage struct {
 		MsgId  uint64    `bson:"msgId"`
