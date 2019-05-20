@@ -173,7 +173,7 @@ type (
 		Data       *getBuddyListRspData `json:"data,omitempty"`
 	}
 	getBuddyListRspData struct {
-		Groups []*getBuddyListRspDataGroup `json:"gropus,omitempty"`
+		Groups []*getBuddyListRspDataGroup `json:"groups,omitempty"`
 	}
 
 	getBuddyListRspDataGroup struct {
@@ -330,7 +330,6 @@ func (m *ICQApi) getChatsResponse(r *io.ReadCloser) (chats []string, e error) {
 		return nil, e
 	}
 
-	fmt.Println(chatsResponse.Response.StatusText)
 	gLogger.Info().Msg("ICQ api request has been successfully parsed")
 	return m.parseChatResponse(chatsResponse)
 }
@@ -340,7 +339,10 @@ func (m *ICQApi) parseChatResponse(chatResponse *getBuddyListRsp) (chats []strin
 	var chatsCollections []interface{}
 	fmt.Println(chatResponse.Response.StatusCode)
 	for _, v := range chatResponse.Response.Data.Groups {
+		gLogger.Debug().Str("group name", v.Name).Msg("")
 		for _, v2 := range v.Buddies {
+			gLogger.Debug().Str("chat friendly name", v2.Friendly).Msg("new parsed chat")
+
 			chats = append(chats, v2.AimId)
 
 			chatsCollections = append(chatsCollections, mongodb.CollectionChats{
@@ -351,11 +353,17 @@ func (m *ICQApi) parseChatResponse(chatResponse *getBuddyListRsp) (chats []strin
 		}
 	}
 
+	gLogger.Debug().Int("interface length", len(chatsCollections)).Msg("")
+	gLogger.Debug().Int("interface capacity", cap(chatsCollections)).Msg("")
+	for _, v := range chats {
+		gLogger.Debug().Str("chatId from array", v).Msg("")
+	}
+
 	if e = gMongoDB.InsertMany("chats", &chatsCollections); e != nil {
 		return nil, e
 	}
 
-	return nil, e
+	return chats, e
 }
 
 func (m *ICQApi) getChatsMessages(chatIds []string) (e error) {
@@ -451,25 +459,23 @@ func (m *ICQApi) parseChatMessagesResponse(chatId string, messages []*getHistory
 	}
 
 	lastMsgId = messages[len(messages)-1].MsgId
-	var chatMessages []*mongodb.CollectionChatsMessage
 	for _, v := range messages {
-		chatMessages = append(chatMessages, &mongodb.CollectionChatsMessage{
-			MsgId:  v.MsgId,
-			Time:   time.Unix(v.Time, 0),
-			Wid:    v.Wid,
-			Sender: v.Chat.Sender,
-			Text:   v.Text,
+		e = gMongoDB.UpdateOne("chats", bson.M{
+			"aimId": chatId,
+		}, bson.M{
+			"$push": bson.M{
+				"messages": &mongodb.CollectionChatsMessage{
+					MsgId:  v.MsgId,
+					Time:   time.Unix(v.Time, 0),
+					Wid:    v.Wid,
+					Sender: v.Chat.Sender,
+					Text:   v.Text,
+				},
+			},
 		})
-	}
-
-	if e = gMongoDB.UpdateOne("chats", bson.M{
-		"aimId": chatId,
-	}, bson.M{
-		"$push": bson.M{
-			"aimId.$.messages": chatMessages,
-		},
-	}); e != nil {
-		return 0, e
+		if e != nil {
+			return 0, e
+		}
 	}
 
 	return lastMsgId, e
