@@ -7,6 +7,7 @@ import (
 const (
 	jobActParseChatMessages = uint8(iota)
 	jobActSaveChatMessage
+	jobActCustomFunc
 )
 
 const (
@@ -19,8 +20,8 @@ const (
 
 type (
 	job struct {
-		payload     interface{}
-		payloadFunc func(...interface{}) error
+		payload     []interface{}
+		payloadFunc func([]interface{}) error
 		status      uint8
 		action      uint8
 		failedCount uint8
@@ -100,7 +101,6 @@ func (m *dispatcher) bootstrap(workers int) (e error) {
 
 func (m *dispatcher) dispatch() {
 	var jbBuf *job
-	var nextWorker chan *job
 
 	gLogger.Info().Msg("Dispatching has been successfully started")
 
@@ -110,7 +110,7 @@ func (m *dispatcher) dispatch() {
 			return
 		case jbBuf = <-m.queue:
 			go func(jb *job) {
-				nextWorker = <-m.pool
+				nextWorker := <-m.pool
 				nextWorker <- jb
 			}(jbBuf)
 		case jbErr := <-m.errorPipe:
@@ -151,9 +151,9 @@ func (m *worker) doJob(jb *job) {
 	switch jb.action {
 	case jobActParseChatMessages:
 	case jobActSaveChatMessage:
-	default:
+	case jobActCustomFunc:
 		if jb.payloadFunc != nil {
-			if e := jb.payloadFunc(); e != nil {
+			if e := jb.payloadFunc(jb.payload); e != nil {
 				m.errors <- jb.newError(e)
 			}
 		} else {

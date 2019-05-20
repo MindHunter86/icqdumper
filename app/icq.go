@@ -341,8 +341,6 @@ func (m *ICQApi) parseChatResponse(chatResponse *getBuddyListRsp) (chats []strin
 	for _, v := range chatResponse.Response.Data.Groups {
 		gLogger.Debug().Str("group name", v.Name).Msg("")
 		for _, v2 := range v.Buddies {
-			gLogger.Debug().Str("chat friendly name", v2.Friendly).Msg("new parsed chat")
-
 			chats = append(chats, v2.AimId)
 
 			chatsCollections = append(chatsCollections, mongodb.CollectionChats{
@@ -368,12 +366,21 @@ func (m *ICQApi) parseChatResponse(chatResponse *getBuddyListRsp) (chats []strin
 
 func (m *ICQApi) getChatsMessages(chatIds []string) (e error) {
 	for _, v := range chatIds {
-		if e = m.getChatMessages(v, 1); e != nil {
-			break
+		gLogger.Debug().Str("chatid", v).Msg("Add chat parsing to queue")
+		gQueue <- &job{
+			action:  jobActCustomFunc,
+			payload: []interface{}{m, v},
+			payloadFunc: func(args []interface{}) error {
+				var icqApi = args[0].(*ICQApi)
+				var chatId = args[1].(string)
+
+				gLogger.Debug().Str("chatid", chatId).Msg("Starting chat parsing for message history")
+				return icqApi.getChatMessages(chatId, 1)
+			},
 		}
 	}
 
-	return e
+	return
 }
 
 func (m *ICQApi) getChatMessages(chatId string, fromMsgId uint64) (e error) {
@@ -424,15 +431,32 @@ func (m *ICQApi) getChatMessages(chatId string, fromMsgId uint64) (e error) {
 		return e
 	}
 
-	var lastMsgId uint64
-	if lastMsgId, e = m.parseChatMessagesResponse(chatId, messagesResponse.Results.Messages); e != nil || lastMsgId == 0 {
-		return e
+	gQueue <- &job{
+		action:  jobActCustomFunc,
+		payload: []interface{}{m, chatId, messagesResponse.Results.Messages},
+		payloadFunc: func(args []interface{}) (err error) {
+			var iApi = args[0].(*ICQApi)
+			var cId = args[1].(string)
+			var messages = args[2].([]*getHistoryRspResultMessage)
+
+			var lastMsgId uint64
+			if lastMsgId, err = iApi.parseChatMessagesResponse(cId, messages); err != nil || lastMsgId == 0 {
+				return
+			}
+
+			return iApi.getChatMessages(cId, lastMsgId)
+		},
 	}
 
-	// recursive calls
-	if e = m.getChatMessages(chatId, lastMsgId); e != nil {
-		return e
-	}
+	//	var lastMsgId uint64
+	//	if lastMsgId, e = m.parseChatMessagesResponse(chatId, messagesResponse.Results.Messages); e != nil || lastMsgId == 0 {
+	//		return e
+	//	}
+	//
+	//	// recursive calls
+	//	if e = m.getChatMessages(chatId, lastMsgId); e != nil {
+	//		return e
+	//	}
 
 	return e
 }

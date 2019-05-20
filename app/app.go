@@ -37,7 +37,7 @@ func NewApp(l *zerolog.Logger, params *AppParams) *App {
 	}
 }
 
-func (m *App) Bootstrap() (e error) {
+func (m *App) Bootstrap(chatId string) (e error) {
 
 	gLogger.Debug().Msg("Starting App initialization...")
 
@@ -65,8 +65,17 @@ func (m *App) Bootstrap() (e error) {
 	go func(ep chan error, wg sync.WaitGroup) {
 		wg.Add(1)
 		defer wg.Done()
+
 		gLogger.Debug().Msg("Queue worker spawn && Queue dispatch...")
 		ep <- m.queueDispatcher.bootstrap(m.params.Workers)
+	}(errorPipe, waitGroup)
+
+	go func(ep chan error, wg sync.WaitGroup) {
+		wg.Add(1)
+		defer wg.Done()
+
+		gLogger.Debug().Msg("Starting chats && messages parsing...")
+		ep <- m.CliGetHistory(m.params.AimSid, chatId)
 	}(errorPipe, waitGroup)
 
 LOOP:
@@ -82,7 +91,6 @@ LOOP:
 	}
 
 	waitGroup.Wait()
-
 	return e
 }
 

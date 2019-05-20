@@ -57,12 +57,12 @@ func main() {
 		},
 		cli.IntFlag{
 			Name:  "workers",
-			Value: 4,
+			Value: 32,
 			Usage: "Workers count for parsing and saving chats and messages",
 		},
 		cli.IntFlag{
 			Name:  "queuebuffer",
-			Value: 1024,
+			Value: 10240,
 			Usage: "Number of unassigned buffered jobs",
 		},
 		cli.IntFlag{
@@ -126,8 +126,7 @@ func main() {
 					WorkerCapacity: c.Int("workercapacity"),
 				})
 
-				return app.Bootstrap()
-				//				return application.NewApp(&log, mongodbDriver).CliGetHistory(c.String("aimsid"), c.String("chat"))
+				return app.Bootstrap(c.String("chat"))
 			},
 		},
 		{
