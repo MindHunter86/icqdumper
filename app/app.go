@@ -23,6 +23,7 @@ type (
 		icqClient          *ICQApi
 		chatsDispatcher    *dispatcher
 		databaseDispatcher *dispatcher
+		cui                *appCui
 	}
 	AppParams struct {
 		Silent                               bool
@@ -90,6 +91,10 @@ func (m *App) Bootstrap(chatId string) (e error) {
 		gLogger.Debug().Msg("Starting chats && messages parsing...")
 		ep <- m.CliGetHistory(m.params.AimSid, chatId)
 	}(errorPipe, waitGroup)
+
+	if m.cui, e = NewAppCui().Bootstrap(); e != nil {
+		return
+	}
 
 LOOP:
 	for {
