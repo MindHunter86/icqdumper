@@ -1,6 +1,7 @@
 package app
 
 import (
+	"io"
 	"os"
 	"os/signal"
 	"sync"
@@ -15,6 +16,7 @@ var (
 	gMongoDB    *mongodb.MongoDB
 	gChatsQueue chan *job
 	gDBQueue    chan *job
+	gBuffer     io.Writer
 )
 
 type (
@@ -23,7 +25,7 @@ type (
 		icqClient          *ICQApi
 		chatsDispatcher    *dispatcher
 		databaseDispatcher *dispatcher
-		cui                *appCui
+		cui                *AppCui
 	}
 	AppParams struct {
 		Silent                               bool
@@ -72,6 +74,16 @@ func (m *App) Bootstrap(chatId string) (e error) {
 		wg.Add(1)
 		defer wg.Done()
 
+		gLogger.Debug().Msg("Starting chats && messages parsing...")
+		var e error
+		m.cui, e = NewAppCui().Bootstrap()
+		ep <- e
+	}(errorPipe, waitGroup)
+
+	go func(ep chan error, wg sync.WaitGroup) {
+		wg.Add(1)
+		defer wg.Done()
+
 		gLogger.Debug().Msg("Queue CHAT worker spawn && Queue dispatch...")
 		ep <- m.chatsDispatcher.bootstrap(m.params.Workers)
 	}(errorPipe, waitGroup)
@@ -92,9 +104,8 @@ func (m *App) Bootstrap(chatId string) (e error) {
 		ep <- m.CliGetHistory(m.params.AimSid, chatId)
 	}(errorPipe, waitGroup)
 
-	if m.cui, e = NewAppCui().Bootstrap(); e != nil {
-		return
-	}
+	log := gLogger.Output(gBuffer).With().Logger()
+	gLogger = &log
 
 LOOP:
 	for {

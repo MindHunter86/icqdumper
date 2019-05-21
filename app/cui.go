@@ -2,21 +2,23 @@ package app
 
 import (
 	"fmt"
+	"io"
 
 	"github.com/jroimartin/gocui"
 )
 
 type (
-	appCui struct {
-		cui *gocui.Gui
+	AppCui struct {
+		cui     *gocui.Gui
+		buffer1 io.Writer
 	}
 )
 
-func NewAppCui() *appCui {
-	return &appCui{}
+func NewAppCui() *AppCui {
+	return &AppCui{}
 }
 
-func (m *appCui) Bootstrap() (*appCui, error) {
+func (m *AppCui) Bootstrap() (*AppCui, error) {
 	var e error
 	if m.cui, e = gocui.NewGui(gocui.OutputNormal); e != nil {
 		return nil, e
@@ -36,18 +38,22 @@ func (m *appCui) Bootstrap() (*appCui, error) {
 	return nil, e
 }
 
-func (m *appCui) layout(g *gocui.Gui) (e error) {
+func (m *AppCui) layout(g *gocui.Gui) error {
 	maxX, maxY := g.Size()
 
-	var view *gocui.View
-	if view, e = g.SetView("hello", maxX/2-7, maxY/2, maxX/2+7, maxY/2+2); e != nil {
+	if view, e := g.SetView("hello", 1, 1, maxX-1, maxY-1); e != nil {
 		if e != gocui.ErrUnknownView {
-			return
+			return e
 		}
-		fmt.Println(view, "Hello World!")
+
+		m.buffer1 = view
+		fmt.Fprintln(view, "Hello Worlddddddddddddddddd!")
+		fmt.Fprintln(view, maxX, maxY)
 	}
 
-	return
+	return nil
 }
 
-func (m *appCui) quit(g *gocui.Gui, v *gocui.View) error { return gocui.ErrQuit }
+func (m *AppCui) quit(g *gocui.Gui, v *gocui.View) error { return gocui.ErrQuit }
+func (m *AppCui) GetBuffer() io.Writer                   { return m.buffer1 }
+func (m *AppCui) Destroy()                               { m.cui.Close() }
