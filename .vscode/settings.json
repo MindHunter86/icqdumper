@@ -1,5 +1,4 @@
 {
-    "go.gopath": "/home/vkomissarov/Desktop/repos/golang",
     "go.goroot": "/usr/lib/go-1.12",
     "go.lintOnSave": "off",
     "go.vetOnSave": "off",
