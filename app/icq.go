@@ -220,10 +220,7 @@ func (m *ICQApi) dumpPartialHistroy(chatId string, fromMsgId uint64) (lastMsgId 
 
 	var buf = new(bytes.Buffer)
 
-	var reqId uuid.UUID
-	if reqId, e = uuid.NewV4(); e != nil {
-		return 0, e
-	}
+	var reqId = uuid.NewV4()
 
 	var reqBodyParams = &requestParams{
 		chatId, fromMsgId, 10, "init",
@@ -287,10 +284,7 @@ func (m *ICQApi) getChats() (chats []string, e error) {
 
 	gLogger.Debug().Msg("Trying to fetch chats...")
 
-	var reqId uuid.UUID
-	if reqId, e = uuid.NewV4(); e != nil {
-		return nil, e
-	}
+	var reqId = uuid.NewV4()
 
 	var reqUrl *url.URL
 	if reqUrl, e = url.Parse("https://botapi.icq.net/getBuddyList?aimsid=" + m.aimsid + "&r=" + reqId.String()); e != nil {
@@ -387,10 +381,7 @@ func (m *ICQApi) getChatMessages(chatId string, fromMsgId uint64) (e error) {
 
 	gLogger.Debug().Str("chatId", chatId).Uint64("lastMsgId", fromMsgId).Msg("Trying to fetch messages for chat")
 
-	var reqId uuid.UUID
-	if reqId, e = uuid.NewV4(); e != nil {
-		return e
-	}
+	var reqId = uuid.NewV4()
 
 	var reqUrl *url.URL
 	if reqUrl, e = url.Parse("https://botapi.icq.net/rapi"); e != nil {
